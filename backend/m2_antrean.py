@@ -1,413 +1,349 @@
-import csv
-import time
-
+import re
 class Stack:
     def __init__(self):
         self.data = []
 
-    def push(self, nilai):
-        self.data.append(nilai)
+    def push(self, item):
+        self.data.append(item)
 
     def pop(self):
-        if self.kosong():
+        if self.is_empty():
             return None
         return self.data.pop()
 
     def peek(self):
-        if self.kosong():
+        if self.is_empty():
             return None
         return self.data[-1]
 
-    def kosong(self):
+    def is_empty(self):
         return len(self.data) == 0
-
-    def ukuran(self):
-        return len(self.data)
-
-
-def pecah_token(ekspresi):
-    token = []
-    angka = ""
-
-    for karakter in ekspresi:
-        if karakter.isdigit() or karakter == ".":
-            angka += karakter
-        else:
-            if angka != "":
-                token.append(angka)
-                angka = ""
-
-            if karakter in "+-*/()":
-                token.append(karakter)
-            elif karakter.isspace():
-                continue
-            else:
-                raise ValueError(
-                    "Karakter tidak valid: " + karakter
-                )
-
-    if angka != "":
-        token.append(angka)
-
-    return token
-
-
+       
 def prioritas(operator):
     if operator == "+" or operator == "-":
         return 1
-    if operator == "*" or operator == "/":
+    elif operator == "*" or operator == "/":
         return 2
     return 0
 
 
 def ke_postfix(ekspresi):
-    token = pecah_token(ekspresi)
-    stack = Stack()
-    hasil = []
+    tokens = re.findall(r"\d+|[()+\-*/]|\S", ekspresi)
 
-    for item in token:
-        if item[0].isdigit() or item[0] == ".":
-            hasil.append(item)
+    # Memastikan semua karakter yang digunakan valid
+    ekspresi_bersih = re.sub(r"\s+", "", ekspresi)
+    if "".join(tokens) != ekspresi_bersih:
+        raise ValueError("Ekspresi mengandung karakter tidak valid.")
 
-        elif item == "(":
-            stack.push(item)
+    output = []
+    operator_stack = Stack()
+    operator = {"+", "-", "*", "/"}
 
-        elif item == ")":
-            ketemu_kurung = False
+    for token in tokens:
+        if token.isdigit():
+            output.append(token)
 
-            while not stack.kosong():
-                atas = stack.pop()
+        elif token == "(":
+            operator_stack.push(token)
+
+        elif token == ")":
+            ditemukan_buka = False
+
+            while not operator_stack.is_empty():
+                atas = operator_stack.pop()
 
                 if atas == "(":
-                    ketemu_kurung = True
+                    ditemukan_buka = True
                     break
 
-                hasil.append(atas)
+                output.append(atas)
 
-            if not ketemu_kurung:
-                raise ValueError("Kurung tidak berpasangan")
+            if not ditemukan_buka:
+                raise ValueError("Tanda kurung tidak berpasangan.")
+
+        elif token in operator:
+            while (
+                not operator_stack.is_empty()
+                and operator_stack.peek() != "("
+                and prioritas(operator_stack.peek()) >= prioritas(token)
+            ):
+                output.append(operator_stack.pop())
+
+            operator_stack.push(token)
 
         else:
-            while (
-                not stack.kosong()
-                and stack.peek() != "("
-                and prioritas(stack.peek()) >= prioritas(item)
-            ):
-                hasil.append(stack.pop())
+            raise ValueError(f"Token tidak valid: {token}")
 
-            stack.push(item)
-
-    while not stack.kosong():
-        atas = stack.pop()
+    while not operator_stack.is_empty():
+        atas = operator_stack.pop()
 
         if atas == "(":
-            raise ValueError("Kurung tidak berpasangan")
+            raise ValueError("Tanda kurung tidak berpasangan.")
 
-        hasil.append(atas)
+        output.append(atas)
 
-    return hasil
+    # Validasi urutan operand dan operator
+    jumlah_operand = 0
+
+    for token in output:
+        if token.isdigit():
+            jumlah_operand += 1
+        else:
+            if jumlah_operand < 2:
+                raise ValueError("Susunan ekspresi tidak valid.")
+            jumlah_operand -= 1
+
+    if jumlah_operand != 1:
+        raise ValueError("Susunan ekspresi tidak valid.")
+
+    return " ".join(output)
 
 
-def hitung_postfix(postfix):
-    stack = Stack()
+def hitung(postfix):
+    angka_stack = Stack()
+    tokens = postfix.split()
+    operator = {"+", "-", "*", "/"}
 
-    for item in postfix:
-        if item not in ("+", "-", "*", "/"):
-            stack.push(float(item))
+    if not tokens:
+        raise ValueError("Ekspresi postfix kosong.")
+
+    for token in tokens:
+        if token.isdigit():
+            angka_stack.push(int(token))
+
+        elif token in operator:
+            if len(angka_stack.data) < 2:
+                raise ValueError("Susunan postfix tidak valid.")
+
+            b = angka_stack.pop()
+            a = angka_stack.pop()
+
+            if token == "+":
+                hasil = a + b
+            elif token == "-":
+                hasil = a - b
+            elif token == "*":
+                hasil = a * b
+            else:
+                if b == 0:
+                    raise ZeroDivisionError("Tidak bisa membagi dengan nol.")
+                hasil = a / b
+
+            angka_stack.push(hasil)
 
         else:
-            operand_kanan = stack.pop()
-            operand_kiri = stack.pop()
+            raise ValueError(f"Token postfix tidak valid: {token}")
 
-            if operand_kiri is None or operand_kanan is None:
-                raise ValueError("Ekspresi tidak valid")
+    if len(angka_stack.data) != 1:
+        raise ValueError("Susunan postfix tidak valid.")
 
-            if item == "+":
-                hasil = operand_kiri + operand_kanan
-            elif item == "-":
-                hasil = operand_kiri - operand_kanan
-            elif item == "*":
-                hasil = operand_kiri * operand_kanan
-            else:
-                if operand_kanan == 0:
-                    raise ZeroDivisionError(
-                        "Tidak bisa membagi dengan nol"
-                    )
-                hasil = operand_kiri / operand_kanan
-
-            stack.push(hasil)
-
-    if stack.ukuran() != 1:
-        raise ValueError("Ekspresi tidak valid")
-
-    return stack.pop()
+    return angka_stack.pop()
 
 
-def hitung_ekspresi(ekspresi):
-    postfix = ke_postfix(ekspresi)
-    hasil = hitung_postfix(postfix)
-    return postfix, hasil
-
-
-class AntreanNaif:
+class NaiveQueue:
     def __init__(self):
         self.data = []
-        self.total_geser = 0
+        self.total_shifts = 0
 
-    def enqueue(self, nilai):
-        self.data.append(nilai)
+    def enqueue(self, item):
+        self.data.append(item)
 
     def dequeue(self):
-        if self.kosong():
+        if len(self.data) == 0:
             return None
 
-        jumlah = len(self.data) - 1
-        nilai = self.data.pop(0)
+        item = self.data.pop(0)
+        self.total_shifts += len(self.data)
+        return item
 
-        self.total_geser += jumlah
-
-        return nilai
-
-    def kosong(self):
+    def is_empty(self):
         return len(self.data) == 0
 
-    def ukuran(self):
+    def size(self):
         return len(self.data)
 
-    def lihat_depan(self):
-        if self.kosong():
-            return None
-        return self.data[0]
 
-
-class AntreanMelingkar:
-    def __init__(self, kapasitas=8):
-        if kapasitas < 1:
-            kapasitas = 1
-
+class CircularQueue:
+    def __init__(self, kapasitas=5):
         self.data = [None] * kapasitas
+        self.kapasitas = kapasitas
         self.front = 0
         self.rear = 0
         self.count = 0
-        self.total_geser = 0
 
-    def _perbesar(self):
-        kapasitas_lama = len(self.data)
-        kapasitas_baru = kapasitas_lama * 2
-        data_baru = [None] * kapasitas_baru
-
-        for i in range(self.count):
-            indeks_lama = (self.front + i) % kapasitas_lama
-            data_baru[i] = self.data[indeks_lama]
-
-        self.data = data_baru
-        self.front = 0
-        self.rear = self.count
-
-    def enqueue(self, nilai):
-        if self.count == len(self.data):
-            self._perbesar()
-
-        self.data[self.rear] = nilai
-        self.rear = (self.rear + 1) % len(self.data)
-        self.count += 1
-
-    def dequeue(self):
-        if self.kosong():
-            return None
-
-        nilai = self.data[self.front]
-        self.data[self.front] = None
-        self.front = (self.front + 1) % len(self.data)
-        self.count -= 1
-
-        return nilai
-
-    def kosong(self):
-        return self.count == 0
-
-    def ukuran(self):
-        return self.count
-
-    def lihat_depan(self):
-        if self.kosong():
-            return None
-        return self.data[self.front]
-
-    def kapasitas(self):
-        return len(self.data)
-
-
-class ManajerAntrean:
-    def __init__(self):
-        self.naif = AntreanNaif()
-        self.melingkar = AntreanMelingkar()
-        self.undo_stack = Stack()
-        self.redo_stack = Stack()
-
-    def muat_data(self, daftar_pesanan):
-        self.naif = AntreanNaif()
-        self.melingkar = AntreanMelingkar()
-
-        for pesanan in daftar_pesanan:
-            self.naif.enqueue(pesanan)
-            self.melingkar.enqueue(pesanan)
-
-        self.undo_stack = Stack()
-        self.redo_stack = Stack()
-
-    def enqueue(self, pesanan):
-        self.naif.enqueue(pesanan)
-        self.melingkar.enqueue(pesanan)
-
-        self.undo_stack.push(("ENQUEUE", pesanan))
-
-        self.redo_stack = Stack()
-
-    def dequeue(self, jumlah=1):
-        if jumlah < 1:
-            raise ValueError("Jumlah harus minimal 1")
-
-        keluar_naif = []
-        keluar_melingkar = []
-
-        for i in range(jumlah):
-            if self.naif.kosong() or self.melingkar.kosong():
-                break
-
-            keluar_naif.append(self.naif.dequeue())
-            keluar_melingkar.append(self.melingkar.dequeue())
-
-        if len(keluar_naif) > 0:
-            self.undo_stack.push(
-                ("DEQUEUE", keluar_naif)
-            )
-            self.redo_stack = Stack()
-
-        return keluar_naif, keluar_melingkar
-
-    def undo(self):
-        if self.undo_stack.kosong():
-            return "Tidak ada aksi untuk dibatalkan"
-
-        aksi = self.undo_stack.pop()
-        jenis = aksi[0]
-        nilai = aksi[1]
-
-        if jenis == "ENQUEUE":
-            terakhir_naif = self.naif.dequeue()
-            terakhir_melingkar = self.melingkar.dequeue()
-
-            if (
-                terakhir_naif != nilai
-                or terakhir_melingkar != nilai
-            ):
-                raise RuntimeError(
-                    "Urutan antrean tidak konsisten"
-                )
-
-        elif jenis == "DEQUEUE":
-            self.naif.data = nilai + self.naif.data
-
-            antrean_lama = [
-                self.melingkar.data[
-                    (self.melingkar.front + i)
-                    % len(self.melingkar.data)
-                ]
-                for i in range(self.melingkar.count)
-            ]
-
-            antrean_baru = nilai + antrean_lama
-            kapasitas = len(self.melingkar.data)
-
-            while kapasitas < len(antrean_baru):
-                kapasitas *= 2
-
-            self.melingkar = AntreanMelingkar(kapasitas)
-
-            for pesanan in antrean_baru:
-                self.melingkar.enqueue(pesanan)
-
-        self.redo_stack.push(aksi)
-        return "Undo berhasil: " + jenis
-
-    def redo(self):
-        if self.redo_stack.kosong():
-            return "Tidak ada aksi untuk diulang"
-
-        aksi = self.redo_stack.pop()
-        jenis = aksi[0]
-        nilai = aksi[1]
-
-        if jenis == "ENQUEUE":
-            self.naif.enqueue(nilai)
-            self.melingkar.enqueue(nilai)
-
-        elif jenis == "DEQUEUE":
-            for pesanan in nilai:
-                self.naif.dequeue()
-                self.melingkar.dequeue()
-
-        self.undo_stack.push(aksi)
-        return "Redo berhasil: " + jenis
-
-    def konsisten(self):
-        if self.naif.ukuran() != self.melingkar.ukuran():
+    def enqueue(self, item):
+        if self.count == self.kapasitas:
             return False
 
-        for i in range(self.naif.ukuran()):
-            nilai_naif = self.naif.data[i]
-            nilai_melingkar = self.melingkar.data[
-                (self.melingkar.front + i)
-                % len(self.melingkar.data)
-            ]
+        self.data[self.rear] = item
+        self.rear = (self.rear + 1) % self.kapasitas
+        self.count += 1
+        return True
+    
+    def enqueue_front(self, item):
+        if self.count == self.kapasitas:
+            return False
 
-            if nilai_naif != nilai_melingkar:
-                return False
-
+        self.front = (self.front - 1) % self.kapasitas
+        self.data[self.front] = item
+        self.count += 1
         return True
 
+    def dequeue(self):
+        if self.count == 0:
+            return None
 
-def muat_pesanan_antre(nama_file="data/pesanan.csv"):
-    daftar = []
+        item = self.data[self.front]
+        self.data[self.front] = None
+        self.front = (self.front + 1) % self.kapasitas
+        self.count -= 1
+        return item
+    
+    def dequeue_rear(self):
+        if self.count == 0:
+            return None
 
-    with open(nama_file, "r", encoding="utf-8-sig", newline="") as file:
-        pembaca = csv.DictReader(file)
+        self.rear = (self.rear - 1) % self.kapasitas
+        item = self.data[self.rear]
+        self.data[self.rear] = None
+        self.count -= 1
+        return item
 
-        for baris in pembaca:
-            status = baris.get("status", "").strip().upper()
+    def is_empty(self):
+        return self.count == 0
 
-            if status == "ANTRE":
-                daftar.append(baris)
-
-    return daftar
+    def size(self):
+        return self.count
 
 
-def bandingkan_dequeue(daftar_pesanan, jumlah=1):
-    naif = AntreanNaif()
-    melingkar = AntreanMelingkar()
+class RiwayatAksi:
+    def __init__(self):
+        self.undo_stack = Stack()
+        self.redo_stack = Stack()
 
-    for pesanan in daftar_pesanan:
-        naif.enqueue(pesanan)
-        melingkar.enqueue(pesanan)
+    def catat_aksi(self, aksi):
+        self.undo_stack.push(aksi)
 
-    mulai = time.perf_counter()
+        # Aksi baru menghapus riwayat redo
+        self.redo_stack = Stack()
 
-    for i in range(jumlah):
-        naif.dequeue()
+    def ambil_undo(self):
+        if self.undo_stack.is_empty():
+            return None
 
-    waktu_naif = (time.perf_counter() - mulai) * 1000
+        aksi = self.undo_stack.pop()
+        self.redo_stack.push(aksi)
+        return aksi
 
-    mulai = time.perf_counter()
+    def ambil_redo(self):
+        if self.redo_stack.is_empty():
+            return None
 
-    for i in range(jumlah):
-        melingkar.dequeue()
+        aksi = self.redo_stack.pop()
+        self.undo_stack.push(aksi)
+        return aksi
 
-    waktu_melingkar = (time.perf_counter() - mulai) * 1000
 
-    return {
-        "waktu_naif_ms": waktu_naif,
-        "waktu_melingkar_ms": waktu_melingkar,
-        "geseran_naif": naif.total_geser,
-        "geseran_melingkar": melingkar.total_geser,
-    }
+
+class AntreanDenganUndo:
+    def __init__(self, kapasitas=10):
+        self.antrean = CircularQueue(kapasitas)
+        self.undo_stack = Stack()
+        self.redo_stack = Stack()
+
+    def enqueue(self, item):
+        berhasil = self.antrean.enqueue(item)
+
+        if not berhasil:
+            return False
+
+        self.undo_stack.push(("ENQUEUE", item))
+        self.redo_stack = Stack()
+        return True
+
+    def dequeue(self):
+        item = self.antrean.dequeue()
+
+        if item is None:
+            return None
+
+        # Simpan pesanan agar bisa dikembalikan saat undo
+        self.undo_stack.push(("DEQUEUE", [item]))
+        self.redo_stack = Stack()
+        return item
+
+    def undo(self):
+        if self.undo_stack.is_empty():
+            return None
+
+        aksi = self.undo_stack.peek()
+
+        if aksi[0] == "ENQUEUE":
+            item = self.antrean.dequeue_rear()
+
+            if item is None:
+                return None
+
+            self.undo_stack.pop()
+            self.redo_stack.push(aksi)
+            return item
+
+        elif aksi[0] == "DEQUEUE":
+            daftar_pesanan = aksi[1]
+
+            # Kembalikan ke depan dengan urutan yang benar
+            for item in reversed(daftar_pesanan):
+                if not self.antrean.enqueue_front(item):
+                    return None
+
+            self.undo_stack.pop()
+            self.redo_stack.push(aksi)
+            return daftar_pesanan
+
+        return None
+
+    def redo(self):
+        if self.redo_stack.is_empty():
+            return None
+
+        aksi = self.redo_stack.peek()
+
+        if aksi[0] == "ENQUEUE":
+            berhasil = self.antrean.enqueue(aksi[1])
+
+            if not berhasil:
+                return None
+
+            self.redo_stack.pop()
+            self.undo_stack.push(aksi)
+            return aksi[1]
+
+        elif aksi[0] == "DEQUEUE":
+            jumlah = len(aksi[1])
+            daftar_pesanan = []
+
+            for _ in range(jumlah):
+                item = self.antrean.dequeue()
+
+                if item is None:
+                    # Kembalikan pesanan yang telanjur dikeluarkan
+                    for pesanan in reversed(daftar_pesanan):
+                        self.antrean.enqueue_front(pesanan)
+                    return None
+
+                daftar_pesanan.append(item)
+
+            self.redo_stack.pop()
+            self.undo_stack.push(aksi)
+            return daftar_pesanan
+        
+        return None
+    
+    def undo_last(self):
+        return self.undo()
+
+    def redo_last(self):
+        return self.redo()
+
+    def history(self):
+        return self.undo_stack.data.copy()
